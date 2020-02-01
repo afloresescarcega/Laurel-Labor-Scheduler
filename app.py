@@ -23,6 +23,13 @@ OUTPUT_SPREADSHEET_ID_COPY = '1Zz6otTDbeqJWWatzNf4ErWvc3lVuDUn4b1EPKff6xpk'
 OUTPUT_RANGE = "Fixed!A2:I"
 
 
+class Person:
+    def __init__(self, _name):
+        self.name = _name
+        self.days_available = [[], [], [], [], [], [], []] # first index has available time ranges for Monday; last index for Sunday
+
+    def __str__(self):
+        return self.name + ":\n" + "Mondays: " + str(self.days_available[0]) + "\nTuesdays: "  + str(self.days_available[1]) + "\nWednesdays: " + str(self.days_available[2]) + "\nThursdays: " + str(self.days_available[3]) + "\nFridays: " + str(self.days_available[4]) + "\nSaturdays: " + str(self.days_available[5]) + "\nSundays: " + str(self.days_available[6]) + "\n"
 class LaborPosition:
     def __init__(self, _name, start_hour, finish_hour, start_minute="00", finish_minute="00"):
         # start_hour and finish_hour must be 24hr time, integer
@@ -42,6 +49,7 @@ class LaborPosition:
 class LaborSchedule:
     def __init__(self):
         self.positions = []
+        self.people = []
 
 def main():
     """Shows basic usage of the Sheets API.
@@ -161,30 +169,90 @@ def main():
         print('Full Name, :')
         DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         COL_OFFSET = 4 # Offset from the start of the timeslots
-        for person in values:
-            print("")
-            # Print columns A and E, which correspond to indices 0 and 4.
-            # print('%s %s, ' % (person[2], person[3]))
-            # print("~ ", len(person), str(person))
-            full_name = person[2] + " " + person[3]
-            print("Person:", full_name)
-            for time_slot in range(COL_OFFSET, len(person)): # first time_slot is 8:00am; Minus, timestamp, email, first name, last name 
-                i = time_slot - 4
-                # print("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + i//2) + ":" + str(3*(i%2)) + "5"+":00-0600")
-                start_time = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + i//2) + ":" + str(3*(time_slot%2)) + "5"+":00-0600")
-                pos_time = l.time_range
-                # print("Position name:", l.name, "Position time", pos_time, "Start time:", start_time)
-                print()
-                # print("Timeslot", time_slot - COL_OFFSET, "len", len(person))
-                print()
-                days_available = person[time_slot - COL_OFFSET].split(", ")
-                print("Days", full_name, "is able to work:", days_available)
-                for position in laborSchedule.positions:
-                    for day in days_available: # days that they are able to work for this timeslot
-                        if start_time in pos_time and day: # they are able to work during this time
-                            print("Start_time", start_time, "pos_time", pos_time, "day", day)
-                            position.days[DAYS.index(day)].append(full_name)
-                            print("Adding", full_name, "to", l.name, "on", day)
+
+        for person_row in values:
+            # create a person object
+            full_name = person_row[2] + " " + person_row[3]
+            person = Person(full_name)
+            for time_slot in range(COL_OFFSET, len(person_row)):
+                i = time_slot - COL_OFFSET
+                if not person_row[time_slot]: # Skip because not days with this time chunk
+                    print(full_name, "skipped time slot", time_slot)
+                    continue
+                days_available_in_chunk = person_row[time_slot].split(", ")
+                print(full_name, "has these days", days_available_in_chunk)
+                if days_available_in_chunk: # has a day available for this time chunk
+
+                    if i < 31:
+                        person_available_time_chunk = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + (i + 1)//2) + ":" + str(3*((i + 1)%2)) + "0"+":00-0600")
+                        print(full_name, "has this person_available_time_chunk", person_available_time_chunk)
+                    elif i == 31:
+                        person_available_time_chunk = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + (i)//2) + ":59"+":00-0600")
+                        print(full_name, "has this person_available_time_chunk", person_available_time_chunk)
+                    for day in days_available_in_chunk:
+                        if not day: # Skip because not days with this time chunk
+                            print(full_name, "skipped day", day)
+                            continue
+                        day_index = DAYS.index(day) # Monday = 0 ... Sunday = 6
+                        assert(day_index <= 6)
+                        if not person.days_available[day_index]: # If initial time chunk for this day, don't coalesce
+                            print(full_name, "has no previous time for", day_index, ". This is the before:", person.days_available[day_index])
+                            person.days_available[day_index].append(person_available_time_chunk)
+                            print(full_name, "now has time for", day_index,":", "This is the after:", person.days_available[day_index])
+                        if len(person.days_available[day_index]) >= 1: # There is a previous time chunk for this day
+                            print(full_name, "has  previous time for", day_index, ". This is the before:", person.days_available[day_index])
+                            last_time_chunk = person.days_available[day_index][-1]
+                            print(full_name, "'s previous time for", day_index, ":",last_time_chunk)
+                            if last_time_chunk.is_intersection(person_available_time_chunk): # times do intersect
+                                if last_time_chunk.intersection(person_available_time_chunk).get_timedelta_second() == 0: # coalesce
+                                    print("Coalescing last time chunk: ", last_time_chunk, "and", person_available_time_chunk)
+                                    s = last_time_chunk.encompass(person_available_time_chunk)
+                                    person.days_available[day_index].pop() # remove the previous time because we are coalescing them
+                                    person.days_available[day_index].append(s)
+                            else:
+                                print(full_name, "'s times do not intersect:", last_time_chunk.is_intersection(person_available_time_chunk))
+                                person.days_available[day_index].append(person_available_time_chunk)
+
+                                
+
+
+
+
+                # # Comes up with the 30 minute time chunk
+                # person_available_time_chunk = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + i//2) + ":" + str(3*(time_slot%2)) + "5"+":00-0600")
+                # if i == 0: # first doesn't have a previous time chunk
+                #     person.
+            laborSchedule.people.append(person)
+        for p in laborSchedule.people:
+            print(p)
+
+        """
+        Do not use the bottom
+        """
+        # for person in values:
+        #     print("")
+        #     # Print columns A and E, which correspond to indices 0 and 4.
+        #     # print('%s %s, ' % (person[2], person[3]))
+        #     # print("~ ", len(person), str(person))
+        #     full_name = person[2] + " " + person[3]
+        #     print("Person:", full_name)
+        #     for time_slot in range(COL_OFFSET, len(person)): # first time_slot is 8:00am; Minus, timestamp, email, first name, last name 
+        #         i = time_slot - 4
+        #         # print("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + i//2) + ":" + str(3*(i%2)) + "5"+":00-0600")
+        #         start_time = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + i//2) + ":" + str(3*(time_slot%2)) + "5"+":00-0600")
+        #         pos_time = l.time_range
+        #         # print("Position name:", l.name, "Position time", pos_time, "Start time:", start_time)
+        #         print()
+        #         # print("Timeslot", time_slot - COL_OFFSET, "len", len(person))
+        #         print()
+        #         days_available = person[time_slot - COL_OFFSET].split(", ")
+        #         print("Days", full_name, "is able to work:", days_available)
+        #         for position in laborSchedule.positions:
+        #             for day in days_available: # days that they are able to work for this timeslot
+        #                 if start_time in pos_time and day: # they are able to work during this time
+        #                     print("Start_time", start_time, "pos_time", pos_time, "day", day)
+        #                     position.days[DAYS.index(day)].append(full_name)
+        #                     print("Adding", full_name, "to", l.name, "on", day)
 
     for l in laborSchedule.positions:
         pass
