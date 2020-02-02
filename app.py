@@ -22,6 +22,8 @@ OUTPUT_SPREADSHEET_ID_COPY = '1Zz6otTDbeqJWWatzNf4ErWvc3lVuDUn4b1EPKff6xpk'
 
 OUTPUT_RANGE = "Fixed!A2:I"
 
+OUTPUT_OUTPUT_RANGE = "Fixed!C2:I"
+
 
 class Person:
     def __init__(self, _name):
@@ -51,7 +53,100 @@ class LaborSchedule:
         self.positions = []
         self.people = []
 
+def publish(laborSchedule=None):
+    from pprint import pprint
+
+    from googleapiclient import discovery
+
+    # TODO: Change placeholder below to generate authentication credentials. See
+    # https://developers.google.com/sheets/quickstart/python#step_3_set_up_the_sample
+    #
+    # Authorize using one of the following scopes:
+    #     'https://www.googleapis.com/auth/drive'
+    #     'https://www.googleapis.com/auth/drive.file'
+    #     'https://www.googleapis.com/auth/spreadsheets'
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+
+    service = build('sheets', 'v4', credentials=creds)
+
+    # The ID of the spreadsheet to update.
+    spreadsheet_id = '1Zz6otTDbeqJWWatzNf4ErWvc3lVuDUn4b1EPKff6xpk'  # TODO: Update placeholder value.
+
+    # The A1 notation of the values to update.
+    range_ = OUTPUT_OUTPUT_RANGE  # TODO: Update placeholder value.
+
+    # How the input data should be interpreted.
+    value_input_option = 'RAW'  # TODO: Update placeholder value.
+
+    # rows are labor positions
+    # columns are days that people are available for the time that the position occurs
+
+    values = []
+
+    # for dealing with DCU edge case
+    monday_thru_sat = []
+    need_to_add_dcu_mon_sat = True
+    finished_dcu_mon_sat = False
+
+    for position in laborSchedule.positions:
+        # Sunday DCU is separate in laborSchedule but needs to combined with normal DCU
+        if True:
+            values.append([", ".join([name for name in names]) for names in position.days])
+        # else:
+        #     if "Sundays" not in position.name:
+                
+        #         for index, day in enumerate(position.days):
+        #             if index != 6:
+        #                 # values.append([position.name + ", ".join([name for name in names]) for names in position.days])
+        #                 monday_thru_sat.append([position.name + ", ".join([name for name in position.days[index]])])
+        #             else:
+        #                 break
+        #     else: # Sundays
+        #                                         #      [position.name + ", ".join([name for names]) for names in position.days[index]]
+        #         monday_thru_sunday = monday_thru_sat + [ position.name + ", ".join([name for name in position.days[6]])]
+        #         print("UUUUUU")
+        #         print("UUUUUU")
+        #         print("UUUUUU")
+        #         print("UUUUUU")
+        #         print("UUUUUU")
+        #         h = [l[0] for l in monday_thru_sunday]
+        #         print(h) 
+        #         return
+        #         values.append(h) 
+    # print()
+    # print()
+    # print()
+    # print(values)
+    # return 
+    value_range_body = {
+        'values': values
+    }
+
+    request = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=range_, valueInputOption=value_input_option, body=value_range_body)
+    response = request.execute()
+
+    # TODO: Change code below to process the `response` dict:
+    pprint(response)
+
 def main():
+
     """Shows basic usage of the Sheets API.
     Prints values from a sample spreadsheet.
     """
@@ -82,12 +177,12 @@ def main():
     values = result.get('values', [])
     # formats = sheet.get(spreadsheetId=INPUT_SPREADSHEET_ID, includeGridData=True).execute()
 
-    output_result = sheet.values().get(spreadsheetId=OUTPUT_SPREADSHEET_ID, range=OUTPUT_RANGE).execute()
+    output_result = sheet.values().get(spreadsheetId=OUTPUT_SPREADSHEET_ID_COPY, range=OUTPUT_RANGE).execute()
     output_values = output_result.get('values', [])
 
 
-    for line in output_values:
-        print(line)
+    # for line in output_values:
+    #     print(line)
 
     # For each line, create a labor position and store in schedule
 
@@ -141,12 +236,12 @@ def main():
             start_minutes_2 = ":00" if not match_hours[1][2] else match_hours[1][2]
             end_minutes_2 = ":00" if not match_hours[1][6] else match_hours[1][6]
             # print(match_name, match_hours[0][0], match_hours[0][4], match_hours[1][0], match_hours[1][4])
-            if "Sundays" in _name:
-                position_1 = LaborPosition(match_name, start_hour, end_hour, start_minutes, end_minutes)
-                position_2 = LaborPosition(match_name + " Sundays", start_hour_2, end_hour_2, start_minutes_2, end_minutes_2)
-                laborSchedule.positions.append(position_1)
-                laborSchedule.positions.append(position_2)
-                print("Creating two positions", match_name)
+            # if "Sundays" in _name:
+            #     position_1 = LaborPosition(match_name, start_hour, end_hour, start_minutes, end_minutes)
+            #     position_2 = LaborPosition(match_name + " Sundays", start_hour_2, end_hour_2, start_minutes_2, end_minutes_2)
+            #     laborSchedule.positions.append(position_1)
+            #     laborSchedule.positions.append(position_2)
+            #     print("Creating two positions", match_name)
 
         else:
             # _start_minutes = ":00" if not match_hours[0][2] else match_hours[0][2]
@@ -170,6 +265,7 @@ def main():
         DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         COL_OFFSET = 4 # Offset from the start of the timeslots
 
+        # Make the time ranges for every person 
         for person_row in values:
             # create a person object
             full_name = person_row[2] + " " + person_row[3]
@@ -177,40 +273,40 @@ def main():
             for time_slot in range(COL_OFFSET, len(person_row)):
                 i = time_slot - COL_OFFSET
                 if not person_row[time_slot]: # Skip because not days with this time chunk
-                    print(full_name, "skipped time slot", time_slot)
+                    # print(full_name, "skipped time slot", time_slot)
                     continue
                 days_available_in_chunk = person_row[time_slot].split(", ")
-                print(full_name, "has these days", days_available_in_chunk)
+                # print(full_name, "has these days", days_available_in_chunk)
                 if days_available_in_chunk: # has a day available for this time chunk
 
                     if i < 31:
                         person_available_time_chunk = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + (i + 1)//2) + ":" + str(3*((i + 1)%2)) + "0"+":00-0600")
-                        print(full_name, "has this person_available_time_chunk", person_available_time_chunk)
+                        # print(full_name, "has this person_available_time_chunk", person_available_time_chunk)
                     elif i == 31:
                         person_available_time_chunk = DateTimeRange("T"+str(8 + i//2) + ":" + str(3*(i%2)) + "0"+":00-0600", "T"+str(8 + (i)//2) + ":59"+":00-0600")
-                        print(full_name, "has this person_available_time_chunk", person_available_time_chunk)
+                        # print(full_name, "has this person_available_time_chunk", person_available_time_chunk)
                     for day in days_available_in_chunk:
                         if not day: # Skip because not days with this time chunk
-                            print(full_name, "skipped day", day)
+                            # print(full_name, "skipped day", day)
                             continue
                         day_index = DAYS.index(day) # Monday = 0 ... Sunday = 6
                         assert(day_index <= 6)
                         if not person.days_available[day_index]: # If initial time chunk for this day, don't coalesce
-                            print(full_name, "has no previous time for", day_index, ". This is the before:", person.days_available[day_index])
+                            # print(full_name, "has no previous time for", day_index, ". This is the before:", person.days_available[day_index])
                             person.days_available[day_index].append(person_available_time_chunk)
-                            print(full_name, "now has time for", day_index,":", "This is the after:", person.days_available[day_index])
+                            # print(full_name, "now has time for", day_index,":", "This is the after:", person.days_available[day_index])
                         if len(person.days_available[day_index]) >= 1: # There is a previous time chunk for this day
-                            print(full_name, "has  previous time for", day_index, ". This is the before:", person.days_available[day_index])
+                            # print(full_name, "has  previous time for", day_index, ". This is the before:", person.days_available[day_index])
                             last_time_chunk = person.days_available[day_index][-1]
-                            print(full_name, "'s previous time for", day_index, ":",last_time_chunk)
+                            # print(full_name, "'s previous time for", day_index, ":",last_time_chunk)
                             if last_time_chunk.is_intersection(person_available_time_chunk): # times do intersect
                                 if last_time_chunk.intersection(person_available_time_chunk).get_timedelta_second() == 0: # coalesce
-                                    print("Coalescing last time chunk: ", last_time_chunk, "and", person_available_time_chunk)
+                                    # print("Coalescing last time chunk: ", last_time_chunk, "and", person_available_time_chunk)
                                     s = last_time_chunk.encompass(person_available_time_chunk)
                                     person.days_available[day_index].pop() # remove the previous time because we are coalescing them
                                     person.days_available[day_index].append(s)
                             else:
-                                print(full_name, "'s times do not intersect:", last_time_chunk.is_intersection(person_available_time_chunk))
+                                # print(full_name, "'s times do not intersect:", last_time_chunk.is_intersection(person_available_time_chunk))
                                 person.days_available[day_index].append(person_available_time_chunk)
 
                                 
@@ -225,6 +321,21 @@ def main():
             laborSchedule.people.append(person)
         for p in laborSchedule.people:
             print(p)
+            for labor_position in laborSchedule.positions:
+                for day_index in range(7): # 0 = Monday
+                    for person_available_time_chunk in p.days_available[day_index]:
+                        if labor_position.time_range in person_available_time_chunk:
+                            labor_position.days[day_index].append(p.name)
+                            break # don't need to continue looking for a time
+
+        print("\n\n\n\n")
+        for l in laborSchedule.positions:
+            print("\n")
+            print(l)
+        print("\n\n\n\n")
+
+        publish(laborSchedule)
+
 
         """
         Do not use the bottom
@@ -254,8 +365,8 @@ def main():
         #                     position.days[DAYS.index(day)].append(full_name)
         #                     print("Adding", full_name, "to", l.name, "on", day)
 
-    for l in laborSchedule.positions:
-        pass
+    # for l in laborSchedule.positions:
+    #     pass
         # print()
         # print(l)
         # print()
